@@ -6,6 +6,7 @@ builds:
     goos:
       - linux
       - darwin
+      - windows
     goarch:
       - amd64
       - arm64
@@ -16,6 +17,9 @@ builds:
 archives:
   - format: tar.gz
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
 
 checksum:
   name_template: checksums.txt
@@ -27,6 +31,7 @@ brews:
   - repository:
       owner: justinsautter
       name: homebrew-bitsplitter
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     homepage: https://github.com/justinsautter/bitsplitter
     description: CLI subnet calculator for IPv4 and IPv6
     license: MIT

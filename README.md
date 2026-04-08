@@ -11,10 +11,16 @@ brew tap justinsautter/bitsplitter
 brew install bitsplitter
 ```
 
-### Install Script
+### Install Script (macOS/Linux)
 
 ```
 curl -sSL https://raw.githubusercontent.com/justinsautter/bitsplitter/main/install.sh | sh
+```
+
+### Install Script (Windows PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/justinsautter/bitsplitter/main/install.ps1 | iex
 ```
 
 ### Build from Source
