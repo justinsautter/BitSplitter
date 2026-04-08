@@ -257,8 +257,8 @@ func TestCalculateSubnetIPv6(t *testing.T) {
 			if info.IsPrivate != tt.wantPrivate {
 				t.Errorf("IsPrivate = %v, want %v", info.IsPrivate, tt.wantPrivate)
 			}
-			if info.IPClass != "N/A" {
-				t.Errorf("IPClass = %s, want N/A", info.IPClass)
+			if info.IPClass != "" {
+				t.Errorf("IPClass = %q, want empty for IPv6", info.IPClass)
 			}
 		})
 	}
@@ -272,6 +272,154 @@ func TestCalculateSubnetIPv6BinaryMask(t *testing.T) {
 	want := "1111111111111111:1111111111111111:0000000000000000:0000000000000000:0000000000000000:0000000000000000:0000000000000000:0000000000000000"
 	if info.SubnetMaskBin != want {
 		t.Errorf("SubnetMaskBin = %s, want %s", info.SubnetMaskBin, want)
+	}
+}
+
+func TestDecimalMask(t *testing.T) {
+	tests := []struct {
+		input       string
+		wantSubnet  string
+		wantWild    string
+	}{
+		{"192.168.1.0/24", "255.255.255.0", "0.0.0.255"},
+		{"10.0.0.0/8", "255.0.0.0", "0.255.255.255"},
+		{"172.16.0.0/16", "255.255.0.0", "0.0.255.255"},
+		{"192.168.1.0/32", "255.255.255.255", "0.0.0.0"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			info, err := CalculateSubnet(tt.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if info.SubnetMask != tt.wantSubnet {
+				t.Errorf("SubnetMask = %s, want %s", info.SubnetMask, tt.wantSubnet)
+			}
+			if info.WildcardMask != tt.wantWild {
+				t.Errorf("WildcardMask = %s, want %s", info.WildcardMask, tt.wantWild)
+			}
+		})
+	}
+}
+
+func TestReverseDNS(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"192.168.1.0/24", "1.168.192.in-addr.arpa"},
+		{"10.0.0.0/8", "10.in-addr.arpa"},
+		{"172.16.0.0/16", "16.172.in-addr.arpa"},
+		{"192.168.1.128/25", "128/25.1.168.192.in-addr.arpa"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			info, err := CalculateSubnet(tt.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if info.ReverseDNS != tt.want {
+				t.Errorf("ReverseDNS = %s, want %s", info.ReverseDNS, tt.want)
+			}
+		})
+	}
+}
+
+func TestReverseDNSv6(t *testing.T) {
+	info, err := CalculateSubnet("2001:db8::/32")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "8.b.d.0.1.0.0.2.ip6.arpa"
+	if info.ReverseDNS != want {
+		t.Errorf("ReverseDNS = %s, want %s", info.ReverseDNS, want)
+	}
+}
+
+func TestHexRepresentation(t *testing.T) {
+	info, err := CalculateSubnet("192.168.1.0/24")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.HexIP != "0xC0A80100" {
+		t.Errorf("HexIP = %s, want 0xC0A80100", info.HexIP)
+	}
+	if info.HexNetwork != "0xC0A80100" {
+		t.Errorf("HexNetwork = %s, want 0xC0A80100", info.HexNetwork)
+	}
+}
+
+func TestParentNetwork(t *testing.T) {
+	tests := []struct {
+		input      string
+		wantParent string
+	}{
+		{"192.168.1.0/24", "192.168.0.0/23"},
+		{"10.0.0.0/8", "10.0.0.0/7"},
+		{"0.0.0.0/0", "N/A"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			info, err := CalculateSubnet(tt.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if info.ParentCIDR != tt.wantParent {
+				t.Errorf("ParentCIDR = %s, want %s", info.ParentCIDR, tt.wantParent)
+			}
+		})
+	}
+}
+
+func TestSubnetSplit(t *testing.T) {
+	info, err := CalculateSubnet("192.168.1.0/24")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(info.Subnets) != 2 {
+		t.Fatalf("expected 2 subnets, got %d", len(info.Subnets))
+	}
+	if info.Subnets[0] != "192.168.1.0/25" {
+		t.Errorf("Subnets[0] = %s, want 192.168.1.0/25", info.Subnets[0])
+	}
+	if info.Subnets[1] != "192.168.1.128/25" {
+		t.Errorf("Subnets[1] = %s, want 192.168.1.128/25", info.Subnets[1])
+	}
+}
+
+func TestSubnetSplitMaxCIDR(t *testing.T) {
+	info, err := CalculateSubnet("192.168.1.1/32")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(info.Subnets) != 0 {
+		t.Errorf("expected no subnets for /32, got %d", len(info.Subnets))
+	}
+}
+
+func TestParseMaskNotation(t *testing.T) {
+	tests := []struct {
+		ip, mask string
+		want     string
+		wantErr  bool
+	}{
+		{"192.168.1.0", "255.255.255.0", "192.168.1.0/24", false},
+		{"10.0.0.0", "255.0.0.0", "10.0.0.0/8", false},
+		{"172.16.0.0", "255.255.0.0", "172.16.0.0/16", false},
+		{"192.168.1.0", "invalid", "", true},
+		{"invalid", "255.255.255.0", "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.ip+" "+tt.mask, func(t *testing.T) {
+			got, err := ParseMaskNotation(tt.ip, tt.mask)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("error = %v, wantErr = %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && got != tt.want {
+				t.Errorf("got %s, want %s", got, tt.want)
+			}
+		})
 	}
 }
 
