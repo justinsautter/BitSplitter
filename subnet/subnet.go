@@ -2,6 +2,7 @@ package subnet
 
 import (
 	"fmt"
+	"math/big"
 	"net"
 )
 
@@ -9,12 +10,13 @@ import (
 type SubnetInfo struct {
 	IP              net.IP
 	CIDR            int
+	IsIPv6          bool
 	AddressRange    string
-	NumHosts        uint32
+	NumHosts        *big.Int
 	UsableRange     string
 	NetworkAddr     net.IP
-	BroadcastAddr   net.IP
-	UsableHosts     uint32
+	LastAddr        net.IP
+	UsableHosts     *big.Int
 	SubnetMaskBin   string
 	WildcardMaskBin string
 	IPClass         string
@@ -23,57 +25,86 @@ type SubnetInfo struct {
 
 // Computes subnet details from a CIDR notation
 func CalculateSubnet(input string) (*SubnetInfo, error) {
-	// Parse the IP and CIDR
 	_, ipNet, err := net.ParseCIDR(input)
 	if err != nil {
 		return nil, fmt.Errorf("invalid CIDR notation: %v", err)
 	}
 
-	// Get IP and mask
 	ip := ipNet.IP
 	mask := ipNet.Mask
-	cidr, _ := mask.Size()
+	cidr, totalBits := mask.Size()
 
-	// Calculate number of hosts
-	totalBits := 32
-	hostBits := totalBits - cidr
-	numHosts := uint32(1 << hostBits)
+	// Detect IPv4 vs IPv6
+	isIPv6 := ip.To4() == nil
 
-	// Calculate network and broadcast addresses
-	network := ip.Mask(mask)
-	broadcast := make(net.IP, len(ip))
-	for i := range ip {
-		broadcast[i] = network[i] | ^mask[i]
+	// Normalize IP to canonical form
+	if !isIPv6 {
+		ip = ip.To4()
+		mask = mask[:4] // ensure 4-byte mask for IPv4
 	}
 
-	// Calculate usable hosts
-	var usableHosts uint32
+	// Calculate number of hosts
+	hostBits := totalBits - cidr
+	numHosts := new(big.Int).Lsh(big.NewInt(1), uint(hostBits))
+
+	// Calculate network and last addresses
+	network := ip.Mask(mask)
+	lastAddr := make(net.IP, len(ip))
+	for i := range ip {
+		lastAddr[i] = network[i] | ^mask[i]
+	}
+
+	// Calculate usable hosts and range
+	usableHosts := new(big.Int)
 	var usableRange string
-	if numHosts >= 2 {
-		usableHosts = numHosts - 2
-		usableFirst := incrementIP(network)
-		usableLast := decrementIP(broadcast)
-		usableRange = fmt.Sprintf("%s - %s", usableFirst, usableLast)
+
+	if isIPv6 {
+		switch {
+		case cidr == 128:
+			usableHosts.SetInt64(1)
+			usableRange = network.String()
+		case cidr == 127:
+			usableHosts.SetInt64(2)
+			usableRange = fmt.Sprintf("%s - %s", network, lastAddr)
+		default:
+			usableHosts.Set(numHosts)
+			usableRange = fmt.Sprintf("%s - %s", network, lastAddr)
+		}
 	} else {
-		usableRange = "N/A (too small for usable hosts)"
+		switch {
+		case cidr == 32:
+			usableHosts.SetInt64(1)
+			usableRange = network.String()
+		case cidr == 31:
+			usableHosts.SetInt64(2)
+			usableRange = fmt.Sprintf("%s - %s", network, lastAddr)
+		default:
+			usableHosts.Sub(numHosts, big.NewInt(2))
+			usableFirst := incrementIP(network)
+			usableLast := decrementIP(lastAddr)
+			usableRange = fmt.Sprintf("%s - %s", usableFirst, usableLast)
+		}
 	}
 
 	// Convert masks to binary
 	subnetMaskBin := maskToBinary(mask)
 	wildcardMaskBin := maskToBinary(invertMask(mask))
 
-	// Determine IP class
-	ipClass := getIPClass(ip)
+	// Determine IP class (IPv4 only)
+	ipClass := "N/A"
+	if !isIPv6 {
+		ipClass = getIPClass(ip)
+	}
 
-	// Create SubnetInfo
 	info := &SubnetInfo{
 		IP:              ip,
 		CIDR:            cidr,
-		AddressRange:    fmt.Sprintf("%s - %s", network, broadcast),
+		IsIPv6:          isIPv6,
+		AddressRange:    fmt.Sprintf("%s - %s", network, lastAddr),
 		NumHosts:        numHosts,
 		UsableRange:     usableRange,
 		NetworkAddr:     network,
-		BroadcastAddr:   broadcast,
+		LastAddr:        lastAddr,
 		UsableHosts:     usableHosts,
 		SubnetMaskBin:   subnetMaskBin,
 		WildcardMaskBin: wildcardMaskBin,
@@ -85,12 +116,26 @@ func CalculateSubnet(input string) (*SubnetInfo, error) {
 }
 
 // Converts mask to binary string format
+// IPv4: dot-separated 8-bit groups (11111111.11111111.11000000.00000000)
+// IPv6: colon-separated 16-bit groups
 func maskToBinary(mask net.IPMask) string {
+	if len(mask) == 4 {
+		binary := ""
+		for i, b := range mask {
+			binary += fmt.Sprintf("%08b", b)
+			if i < len(mask)-1 {
+				binary += "."
+			}
+		}
+		return binary
+	}
+
+	// IPv6: colon-separated 16-bit groups
 	binary := ""
-	for i, b := range mask {
-		binary += fmt.Sprintf("%08b", b)
-		if i < len(mask)-1 {
-			binary += "."
+	for i := 0; i < len(mask); i += 2 {
+		binary += fmt.Sprintf("%08b%08b", mask[i], mask[i+1])
+		if i < len(mask)-2 {
+			binary += ":"
 		}
 	}
 	return binary

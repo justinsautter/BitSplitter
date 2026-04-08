@@ -1,0 +1,36 @@
+version: 2
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    binary: bitsplitter
+    ldflags:
+      - -s -w
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+
+brews:
+  - repository:
+      owner: justinsautter
+      name: homebrew-bitsplitter
+    homepage: https://github.com/justinsautter/bitsplitter
+    description: CLI subnet calculator for IPv4 and IPv6
+    license: MIT
+    install: |
+      bin.install "bitsplitter"
+    test: |
+      system "#{bin}/bitsplitter", "192.168.1.0/24"

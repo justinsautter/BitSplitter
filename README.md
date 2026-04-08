@@ -1,22 +1,35 @@
 # BitSplitter
 
-BitSplitter is a CLI-based, IPv4 network subnet calculator written in Golang.
+BitSplitter is a CLI network subnet calculator for IPv4 and IPv6, written in Go.
 
 ## Installation
 
-The BitSplitter executable file is included for Unix based systems (Linux/MacOS).
+### Homebrew (macOS/Linux)
 
-You can install it on your system and use BitSplitter from the terminal/command line anywhere doing the following:
+```
+brew tap justinsautter/bitsplitter
+brew install bitsplitter
+```
 
-`mv ./bitsplitter /usr/local/bin/bitsplitter`
+### Install Script
 
-I will be working on an auto installation for the future to cut out this step.
+```
+curl -sSL https://raw.githubusercontent.com/justinsautter/bitsplitter/main/install.sh | sh
+```
+
+### Build from Source
+
+```
+git clone https://github.com/justinsautter/bitsplitter.git
+cd bitsplitter
+make install
+```
 
 ## Usage
 
-Enter in the IP address with CIDR (Classless Inter-Domain Routing) subnet mask you wish to create a subnet for.
+Pass an IP address with CIDR notation. BitSplitter auto-detects IPv4 vs IPv6.
 
-Ex: 172.16.27.0/18
+### IPv4
 
 ```
 bitsplitter 172.16.27.0/18
@@ -37,8 +50,8 @@ Broadcast address: 172.16.63.255
 Usable range: 172.16.0.1 - 172.16.63.254
 Usable hosts: 16382
 
-# Mask information
-IP subnet mask (binary): 11111111.11111111.11000000.00000000
+# Mask Information
+Subnet mask (binary): 11111111.11111111.11000000.00000000
 Wildcard mask (binary): 00000000.00000000.00111111.11111111
 
 # Classification
@@ -46,10 +59,35 @@ IP type: Private
 IP class: B
 ```
 
-![Usage Example Screenshot](https://github.com/user-attachments/assets/a4401865-a9a4-4f0c-8e61-838d3efebadb)
+### IPv6
 
-## Future plans
+```
+bitsplitter 2001:db8::/32
+```
 
-I plan to eventually make this compatible with IPv6 as well. I'm pretty new to this whole programming thing, so this might take awhile.
+Output:
+```
+# Overview (IP/CIDR)
+IP address: 2001:db8::/32
 
-If there are any bugs to report, please let me know!
+# Address Details
+Address range: 2001:db8:: - 2001:db8:ffff:ffff:ffff:ffff:ffff:ffff
+Number of hosts: 79228162514264337593543950336
+
+Network address: 2001:db8::
+Last address: 2001:db8:ffff:ffff:ffff:ffff:ffff:ffff
+
+Usable range: 2001:db8:: - 2001:db8:ffff:ffff:ffff:ffff:ffff:ffff
+Usable hosts: 79228162514264337593543950336
+
+# Mask Information
+Subnet mask (binary): 1111111111111111:1111111111111111:0000000000000000:0000000000000000:0000000000000000:0000000000000000:0000000000000000:0000000000000000
+Wildcard mask (binary): 0000000000000000:0000000000000000:1111111111111111:1111111111111111:1111111111111111:1111111111111111:1111111111111111:1111111111111111
+
+# Classification
+IP type: Public
+```
+
+## License
+
+See [LICENSE](LICENSE) for details.
